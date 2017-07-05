@@ -1,0 +1,264 @@
+//PWM波
+#include "common.h"
+void init(void);
+void KEY_isr();
+void delay();
+void pit0_isr();
+GPIO_InitTypeDef gpio_init_struct;
+UART_InitTypeDef  uart4_init;
+FTM_InitTypeDef ftm_init_struct;
+PIT_InitTypeDef pit0_init;
+int16 Timer,printf_flag;
+uint16 pwm_duty_1=4000,pwm_duty_2=2000;
+int8 auto_flag=0,change_flag_1,pwm_chn=0,change_flag_2;
+//auto_flag    由定时器制作呼吸灯标志位,标志位为1时为呼吸灯
+//change_flag_1  pwm增大或减小标志位
+
+#define LED1 PTC0_O
+#define LED2 PTA17_O
+#define LED3 PTE26_O
+#define LED4 PTD15_O
+#define key1 PTD11_I
+//定义为切换 pwm_chn=0时，控制ch0通道占空比加减
+#define key2 PTD12_I
+//按键按下使用调整占空比，同时屏蔽key3,key4功能
+#define key3 PTD13_I//占空比增大按键
+#define key4 PTD14_I//占空比减小按键
+
+void main(void)
+{
+    init();  
+   LPLD_PIT_EnableIrq(pit0_init);
+    while(1)
+    {
+       if(printf_flag==1)
+      {
+        printf("通道ch%d占空比增大，Ch1占空比=%d%%,Ch2占空比=%d%%\n",pwm_chn+2,pwm_duty_2/100,pwm_duty_1/100);
+        //注意这里是整型
+        printf_flag=0;
+      }
+      if(printf_flag==2)
+      {
+        printf("通道ch%d占空比减小，Ch1占空比=%d%%,Ch2占空比=%d%%\n",pwm_chn+2,pwm_duty_2/100,pwm_duty_1/100);
+         printf_flag=0;
+      }
+      if(printf_flag==3)
+      {
+        printf("RGB七彩灯开始闪烁，不允许按键调节占空比\n");
+        printf_flag=0;
+      }
+         if(printf_flag==4)
+      {
+        printf("此时的按键控制Ch%通道的PWM占空比，是否允许调节：%d(0表示不允许)\
+               \n",pwm_chn+2,~auto_flag);
+         printf_flag=0;
+      }
+        if(printf_flag==5)
+        {
+          printf("切换按键控制：此时控制Ch%d\n",pwm_chn+2);
+          printf_flag=0;
+        }
+         if(printf_flag==6)
+        {
+          printf("切换为");
+          switch(auto_flag)
+          {
+          case 0: printf("按键控制\n");break;
+          case 1: printf("定时器控制\n");break;
+          }
+          printf_flag=0;
+        }       
+             
+    }
+}
+
+ //初始化GPIO
+void init(void)
+{
+      //PTD按键中断
+      gpio_init_struct.GPIO_PTx  = PTD;
+      gpio_init_struct.GPIO_Pins  = GPIO_Pin11|GPIO_Pin12|GPIO_Pin13|GPIO_Pin14;
+      gpio_init_struct.GPIO_Dir  = DIR_INPUT;
+      gpio_init_struct.GPIO_PinControl = INPUT_PULL_UP|IRQC_FA ;//内部上拉，下降沿中断
+      gpio_init_struct.GPIO_Isr   = KEY_isr;
+      LPLD_GPIO_Init(gpio_init_struct);
+      LPLD_GPIO_EnableIrq(gpio_init_struct);
+      
+      gpio_init_struct.GPIO_PTx = PTA;                  
+      gpio_init_struct.GPIO_Pins = GPIO_Pin17;
+      gpio_init_struct.GPIO_Dir = DIR_OUTPUT;           
+      gpio_init_struct.GPIO_Output = OUTPUT_H;          
+      gpio_init_struct.GPIO_PinControl = IRQC_DIS;      
+      LPLD_GPIO_Init(gpio_init_struct);   
+      
+      gpio_init_struct.GPIO_PTx = PTC;                  
+      gpio_init_struct.GPIO_Pins = GPIO_Pin0;
+      gpio_init_struct.GPIO_Dir = DIR_OUTPUT;           
+      gpio_init_struct.GPIO_Output = OUTPUT_H;          
+      gpio_init_struct.GPIO_PinControl = IRQC_DIS;      
+      LPLD_GPIO_Init(gpio_init_struct); 
+      
+      gpio_init_struct.GPIO_PTx = PTD;                  
+      gpio_init_struct.GPIO_Pins = GPIO_Pin15;
+      gpio_init_struct.GPIO_Dir = DIR_OUTPUT;           
+      gpio_init_struct.GPIO_Output = OUTPUT_H;          
+      gpio_init_struct.GPIO_PinControl = IRQC_DIS;      
+      LPLD_GPIO_Init(gpio_init_struct);   
+      
+      gpio_init_struct.GPIO_PTx = PTE;                  
+      gpio_init_struct.GPIO_Pins = GPIO_Pin26;
+      gpio_init_struct.GPIO_Dir = DIR_OUTPUT;           
+      gpio_init_struct.GPIO_Output = OUTPUT_H;          
+      gpio_init_struct.GPIO_PinControl = IRQC_DIS;      
+      LPLD_GPIO_Init(gpio_init_struct); 
+      
+      //UART4初始化
+      uart4_init.UART_Uartx  = UART4;
+      uart4_init.UART_RxIntEnable = 9600;
+      uart4_init.UART_RxPin  = PTE25;
+      uart4_init.UART_TxPin = PTE24;
+      LPLD_UART_Init(uart4_init);
+     
+      pit0_init.PIT_Pitx     =  PIT0;
+      pit0_init.PIT_PeriodMs = 20;
+      pit0_init.PIT_Isr      = pit0_isr;
+      LPLD_PIT_Init(pit0_init);
+     
+      //FTM0通道
+      ftm_init_struct.FTM_Ftmx = FTM0;	//使能FTM0通道
+      ftm_init_struct.FTM_Mode = FTM_MODE_PWM;	//使能PWM模式
+      ftm_init_struct.FTM_PwmFreq = 5000;	//PWM频率5000Hz
+      LPLD_FTM_Init(ftm_init_struct);
+      LPLD_FTM_PWM_Enable(FTM0, FTM_Ch1, pwm_duty_1, PTA4, ALIGN_LEFT);     
+      //使用FTM0 //使能Ch0通道//初始化占空比 =pwm_duty_1_1/10000*100%
+      //使用Ch0通道的PTC1引脚 //脉宽左对齐
+      LPLD_FTM_PWM_Enable(FTM0,FTM_Ch2, pwm_duty_2, PTA5, ALIGN_LEFT );
+      //使用FTM0//使能Ch0通道//初始化占空比 =0//脉宽左对齐
+                  
+}
+
+
+void pit0_isr()
+{
+  if(auto_flag)//标志位为1时表示为呼吸灯状态
+  {
+////////////////////////////通道1控制///////////////////////
+  if(!change_flag_1&&pwm_duty_1>=40)//标志位为0时使占空比减小
+  {                             
+    //注意不要使pwm_duty_1<0 
+    pwm_duty_1-=40;
+    LPLD_FTM_PWM_ChangeDuty(FTM0,FTM_Ch1,pwm_duty_1);
+  }
+  else
+    change_flag_1=1;//当减小到最小时，切换加状态
+  
+  if(change_flag_1&&pwm_duty_1<=5960)
+  {
+    //注意不要使pwm_duty_1>10000
+      pwm_duty_1+=40;
+    LPLD_FTM_PWM_ChangeDuty(FTM0,FTM_Ch1,pwm_duty_1);
+  }
+  else 
+  change_flag_1=0;//当增大到最大时，切换减状态
+ 
+ ////////////////////////////通道2控制///////////////////////
+  if(!change_flag_2&&pwm_duty_2>=40)//标志位为0时使占空比减小
+  {                             
+    //注意不要使pwm_duty_2<0 
+    pwm_duty_2-=40;
+    LPLD_FTM_PWM_ChangeDuty(FTM0,FTM_Ch2,pwm_duty_2);
+  }
+  else
+    change_flag_2=1;//当减小到最小时，切换加状态
+  
+  if(change_flag_2&&pwm_duty_2<=6960)
+  {
+    //注意不要使pwm_duty_2>10000
+      pwm_duty_2+=40;
+    LPLD_FTM_PWM_ChangeDuty(FTM0,FTM_Ch2,pwm_duty_2);
+  }
+    else 
+   change_flag_2=0;//当增大到最大时，切换减状态
+  }
+}
+
+
+void KEY_isr()
+{
+  delay();
+  if(!key2)
+  {
+   auto_flag=~auto_flag;//按键2按下标志位置取反
+   if(auto_flag==0)
+     printf_flag=6;
+   else 
+     printf_flag=3;
+  }
+   if(!key1)//按键一定义为切换调节FTM0的ch0，ch1 通道
+    {
+      pwm_chn=~pwm_chn;
+      printf("pwm_chn=%d\n",pwm_chn);
+      printf_flag=5;
+     
+    } 
+  if(!auto_flag)//标志位为0时,由按键控制加减占空比
+  { 
+    if(!key3)
+    {
+      printf_flag=1;
+        if(!pwm_chn)//pwm_chn=0时，控制ch2通道
+        {
+        if(pwm_duty_1>8000)
+        pwm_duty_1=1000;
+        pwm_duty_1+=1000;
+        LPLD_FTM_PWM_ChangeDuty(FTM0,FTM_Ch2,pwm_duty_1);
+        }
+        else//pwm_chn=-1时，控制ch1通道
+        {
+        if(pwm_duty_2>8000)
+        pwm_duty_2=1000;
+        pwm_duty_2+=1000;
+        LPLD_FTM_PWM_ChangeDuty(FTM0,FTM_Ch1,pwm_duty_2);
+        }
+    }
+  
+    if(!key4)
+    {
+      printf_flag=2;
+       if(!pwm_chn)
+        {
+        if(pwm_duty_1<1000)
+        pwm_duty_1=8000;
+        pwm_duty_1-=1000;
+        LPLD_FTM_PWM_ChangeDuty(FTM0,FTM_Ch2,pwm_duty_1);
+        }
+       else
+       {
+        if(pwm_duty_2<1000)//这个判断需要在减法前面
+        pwm_duty_2=8000;
+        pwm_duty_2-=1000;
+        LPLD_FTM_PWM_ChangeDuty(FTM0,FTM_Ch1,pwm_duty_2);
+       }
+     }
+   }
+ 
+    while(!key4&&!key2&&!key3&&!key1);
+}
+
+
+
+void delay()
+{
+  uint16 i, n;
+  for(i=0;i<25000;i++)
+  {
+    for(n=0;n<50;n++)
+    {
+      asm("nop");
+    }
+  }
+  
+}
+
+
+
