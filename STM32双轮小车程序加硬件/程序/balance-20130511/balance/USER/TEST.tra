@@ -1,0 +1,33 @@
+*** Creating Trace Output File 'TEST.tra' Ok.
+### Preparing for ADS-LD.
+### Creating ADS-LD Command Line
+### List of Objects: adding '"stm32f10x.o"'
+### List of Objects: adding '"ofme_encoder.o"'
+### List of Objects: adding '"ofme_filter.o"'
+### List of Objects: adding '"ofme_iic.o"'
+### List of Objects: adding '"ofme_iic_port.o"'
+### List of Objects: adding '"ofme_led.o"'
+### List of Objects: adding '"ofme_pid.o"'
+### List of Objects: adding '"ofme_pwm.o"'
+### List of Objects: adding '"ofme_time.o"'
+### List of Objects: adding '"ofme_io.o"'
+### List of Objects: adding '"ofme_iic_dev.o"'
+### List of Objects: adding '"ofme_ir_nec.o"'
+### List of Objects: adding '"test.o"'
+### List of Objects: adding '"sys.o"'
+### List of Objects: adding '"usart.o"'
+### ADS-LD Command completed:
+--device DARMSTM "stm32f10x.o" "ofme_encoder.o" "ofme_filter.o" "ofme_iic.o" "ofme_iic_port.o" "ofme_led.o" "ofme_pid.o" "ofme_pwm.o" "ofme_time.o" "ofme_io.o" "ofme_iic_dev.o" "ofme_ir_nec.o" "test.o" "sys.o" "usart.o" --strict --scatter "TEST.sct" 
+--autoat --summary_stderr --info summarysizes --map --xref --callgraph --symbols 
+--info sizes --info totals --info unused --info veneers 
+ --list ".\TEST.map" -o "TEST.axf"### Preparing Environment (PrepEnvAds)
+### ADS-LD Output File: 'TEST.axf'
+### ADS-LD Command File: 'TEST.lnp'
+### Checking for dirty Components...
+### Creating CmdFile 'TEST.lnp', Handle=0x000001B0
+### Writing '.lnp' file
+### ADS-LD Command file 'TEST.lnp' is ready.
+### ADS-LD: About to start ADS-LD Thread.
+### ADS-LD: executed with 0 errors
+### Updating obj list
+### LDADS_file() completed.
